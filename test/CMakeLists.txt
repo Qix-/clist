@@ -12,10 +12,13 @@ if (BUILD_TESTING)
 	add_executable (test-clist-ansi syntax-check.c) # does not need to be run, just needs to compile
 	target_compile_options (test-clist-ansi PRIVATE -ansi)
 
-	add_executable (test-clist
-		main.c
-		test-basic.c)
+	add_executable (test-clist test-basic.c)
 	target_compile_options (test-clist PRIVATE -std=c99)
 
 	add_test (NAME clist-test COMMAND "$<TARGET_FILE:test-clist>")
+
+	add_executable (test-clist-multi test-multi.c)
+	target_compile_options (test-clist-multi PRIVATE -std=c99)
+
+	add_test (NAME clist-multi-test COMMAND "$<TARGET_FILE:test-clist-multi>")
 endif ()

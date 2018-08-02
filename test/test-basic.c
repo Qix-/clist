@@ -14,3 +14,7 @@ const char *test_basic_init(void) {
 
 	return 0;
 }
+
+q_start();
+q_test(test_basic_init);
+q_end();
