@@ -3,7 +3,7 @@
 #include "clist.h"
 
 int main(void) {
-	clist_d _list_;
+	clist _list_;
 	(void) _list_;
 	return 0;
 }

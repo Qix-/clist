@@ -22,11 +22,17 @@
 #	define CLIST(thing) CLIST__(thing, CLIST_NAME)
 #	define CLIST__(thing, name) CLIST_(thing, name)
 #	define CLIST_(thing, name) clist_ ## name ## _ ## thing
+#	define CLIST_T CLIST_T__(CLIST_NAME)
+#	define CLIST_T__(name) CLIST_T_(name)
+#	define CLIST_T_(name) clist_##name
 #else
 #	define CLIST(thing) clist_##thing
+#	define CLIST_T clist
 #	define CLIST_NAME /* so it undef's later on */
 #	define CLIST_
 #	define CLIST__
+#	define CLIST_T_
+#	define CLIST_T__
 #endif
 
 #ifndef CLIST_TYPE
@@ -109,49 +115,25 @@ extern "C" {
 
 typedef CLIST_TYPE CLIST(type);
 
-typedef struct CLIST(block_s) {
+typedef struct CLIST(block) {
 	size_t elements;
 	CLIST(type) data[CLIST_BLOCK_SIZE];
-	struct CLIST(block_s) *next;
-} CLIST(block_s);
+	struct CLIST(block) *next;
+	struct CLIST(block) *prev;
+} CLIST(block);
 
-typedef struct CLIST(block_d) {
-	size_t elements;
-	CLIST(type) data[CLIST_BLOCK_SIZE];
-	struct CLIST(block_d) *next;
-	struct CLIST(block_d) *prev;
-} CLIST(block_d);
-
-typedef struct CLIST(s) {
+typedef struct CLIST_T {
 	size_t count;
-	CLIST(block_s) *begin;
-	CLIST(block_s) stack_block;
-} CLIST(s);
-
-typedef struct CLIST(d) {
-	size_t count;
-	CLIST(block_d) *begin;
-	CLIST(block_d) *end;
-	CLIST(block_d) stack_block;
-} CLIST(d);
+	CLIST(block) *begin;
+	CLIST(block) *end;
+	CLIST(block) stack_block;
+} CLIST_T;
 
 /*
 	METHODS
 */
 
-CLIST_API int CLIST(init_s) (CLIST(s) *list) {
-	CLIST_ASSERT_RETURN(list != NULL, -EINVAL);
-
-	list->count = 0;
-	list->begin = &list->stack_block;
-
-	list->stack_block.elements = 0;
-	list->stack_block.next = NULL;
-
-	return 0;
-}
-
-CLIST_API int CLIST(init_d) (CLIST(d) *list) {
+CLIST_API int CLIST(init) (CLIST_T *list) {
 	CLIST_ASSERT_RETURN(list != NULL, -EINVAL);
 
 	list->count = 0;
@@ -164,9 +146,9 @@ CLIST_API int CLIST(init_d) (CLIST(d) *list) {
 	return 0;
 }
 
-CLIST_API void CLIST(free_s) (CLIST(s) *list) {
-	CLIST(block_s) *cur;
-	CLIST(block_s) *next;
+CLIST_API void CLIST(free) (CLIST_T *list) {
+	CLIST(block) *cur;
+	CLIST(block) *next;
 
 	if (CLIST_UNLIKELY(list == NULL)) {
 		return;
@@ -182,22 +164,9 @@ CLIST_API void CLIST(free_s) (CLIST(s) *list) {
 	} while (CLIST_LIKELY((cur = next) != NULL));
 }
 
-CLIST_API void CLIST(free_d) (CLIST(d) *list) {
-	CLIST(block_d) *cur;
-	CLIST(block_d) *next;
-
-	if (CLIST_UNLIKELY(list == NULL)) {
-		return;
-	}
-
-	cur = list->begin;
-
-	do {
-		next = cur->next;
-		if (CLIST_LIKELY(cur != &list->stack_block)) {
-			free(cur);
-		}
-	} while (CLIST_LIKELY((cur = next) != NULL));
+CLIST_API size_t CLIST(count) (CLIST_T *list) {
+	CLIST_ASSERT_RETURN(list != NULL, -EINVAL);
+	return list->count;
 }
 
 #ifdef __cplusplus
@@ -207,6 +176,9 @@ CLIST_API void CLIST(free_d) (CLIST(d) *list) {
 #undef CLIST
 #undef CLIST_
 #undef CLIST__
+#undef CLIST_T
+#undef CLIST_T_
+#undef CLIST_T__
 #undef CLIST_NAME
 #undef CLIST_TYPE
 #undef CLIST_BLOCK_SIZE

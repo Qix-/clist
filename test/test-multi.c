@@ -14,23 +14,21 @@ typedef struct sample {
 #include "clist_type.h"
 
 const char *test_multi_init(void) {
-	clist_int_d double_int_list;
-	clist_int_s single_int_list;
+	{
+		clist_int L;
 
-	q_assert(clist_int_init_s(&single_int_list) == 0);
-	clist_int_free_s(&single_int_list);
+		q_assert(clist_int_init(&L) == 0);
+		q_assert(clist_int_count(&L) == 0);
+		clist_int_free(&L);
+	}
 
-	q_assert(clist_int_init_d(&double_int_list) == 0);
-	clist_int_free_d(&double_int_list);
+	{
+		clist_sample L;
 
-	clist_sample_d double_sample_list;
-	clist_sample_s single_sample_list;
-
-	q_assert(clist_sample_init_s(&single_sample_list) == 0);
-	clist_sample_free_s(&single_sample_list);
-
-	q_assert(clist_sample_init_d(&double_sample_list) == 0);
-	clist_sample_free_d(&double_sample_list);
+		q_assert(clist_sample_init(&L) == 0);
+		q_assert(clist_sample_count(&L) == 0);
+		clist_sample_free(&L);
+	}
 
 	return 0;
 }
