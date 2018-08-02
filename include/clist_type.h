@@ -34,16 +34,11 @@
 #endif
 
 #ifndef CLIST_BLOCK_SIZE
-#	define CLIST_BLOCK_SIZE 16
-#endif
-
-#ifndef CLIST_STACK_BLOCKS
-#	define CLIST_STACK_BLOCKS 8
+#	define CLIST_BLOCK_SIZE 64
 #endif
 
 #include <assert.h>
 #include <errno.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 
@@ -115,14 +110,12 @@ extern "C" {
 typedef CLIST_TYPE CLIST(type);
 
 typedef struct CLIST(block_s) {
-	bool is_heap;
 	size_t elements;
 	CLIST(type) data[CLIST_BLOCK_SIZE];
 	struct CLIST(block_s) *next;
 } CLIST(block_s);
 
 typedef struct CLIST(block_d) {
-	bool is_heap;
 	size_t elements;
 	CLIST(type) data[CLIST_BLOCK_SIZE];
 	struct CLIST(block_d) *next;
@@ -132,14 +125,14 @@ typedef struct CLIST(block_d) {
 typedef struct CLIST(s) {
 	size_t count;
 	CLIST(block_s) *begin;
-	CLIST(block_s) stack_blocks[CLIST_STACK_BLOCKS];
+	CLIST(block_s) stack_block;
 } CLIST(s);
 
 typedef struct CLIST(d) {
 	size_t count;
 	CLIST(block_d) *begin;
 	CLIST(block_d) *end;
-	CLIST(block_d) stack_blocks[CLIST_STACK_BLOCKS];
+	CLIST(block_d) stack_block;
 } CLIST(d);
 
 /*
@@ -147,38 +140,26 @@ typedef struct CLIST(d) {
 */
 
 CLIST_API int CLIST(init_s) (CLIST(s) *list) {
-	size_t i;
-
 	CLIST_ASSERT_RETURN(list != NULL, -EINVAL);
 
-	CLIST_ASSERT(CLIST_STACK_BLOCKS > 0);
 	list->count = 0;
-	list->begin = &list->stack_blocks[0];
+	list->begin = &list->stack_block;
 
-	for (i = 0; CLIST_LIKELY(i < CLIST_STACK_BLOCKS); i++) {
-		list->stack_blocks[i].is_heap = false;
-		list->stack_blocks[i].elements = 0;
-		list->stack_blocks[i].next = NULL;
-	}
+	list->stack_block.elements = 0;
+	list->stack_block.next = NULL;
 
 	return 0;
 }
 
 CLIST_API int CLIST(init_d) (CLIST(d) *list) {
-	size_t i;
-
 	CLIST_ASSERT_RETURN(list != NULL, -EINVAL);
 
-	CLIST_ASSERT(CLIST_STACK_BLOCKS > 0);
 	list->count = 0;
-	list->begin = &list->stack_blocks[0];
+	list->begin = &list->stack_block;
 	list->end = list->begin;
 
-	for (i = 0; CLIST_LIKELY(i < CLIST_STACK_BLOCKS); i++) {
-		list->stack_blocks[i].is_heap = false;
-		list->stack_blocks[i].elements = 0;
-		list->stack_blocks[i].next = NULL;
-	}
+	list->stack_block.elements = 0;
+	list->stack_block.next = NULL;
 
 	return 0;
 }
@@ -195,7 +176,7 @@ CLIST_API void CLIST(free_s) (CLIST(s) *list) {
 
 	do {
 		next = cur->next;
-		if (CLIST_LIKELY(cur->is_heap)) {
+		if (CLIST_LIKELY(cur != &list->stack_block)) {
 			free(cur);
 		}
 	} while (CLIST_LIKELY((cur = next) != NULL));
@@ -213,7 +194,7 @@ CLIST_API void CLIST(free_d) (CLIST(d) *list) {
 
 	do {
 		next = cur->next;
-		if (CLIST_LIKELY(cur->is_heap)) {
+		if (CLIST_LIKELY(cur != &list->stack_block)) {
 			free(cur);
 		}
 	} while (CLIST_LIKELY((cur = next) != NULL));
