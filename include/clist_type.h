@@ -13,11 +13,12 @@
 	      of clist_type.h and thus will not exist after including
 	      this header.
 
-	NOTE: CLIST_OPTIMIZE_SPLICES et al are not undef'd - if you want
-	      different storage strategies between types, you'll have to
-	      manage the define'ing and undef'ing of the optimization macros.
-
-	      The same goes for CLIST_MALLOC and CLIST_FREE.
+	NOTE: If you're on a system where the use of posix_memalign(3)
+	      or aligned_alloc(3) cannot be used with realloc(3) then
+	      define CLIST_SAFE_REALLOC. Note that this has a potential
+	      performance penalty since the memory is no longer aligned
+	      and the block allocations will be forced to fall back
+	      to malloc(3).
 */
 
 /* see header comment - DO NOT PRAGMA ONCE OR INCLUDE GUARD! */
@@ -46,7 +47,7 @@
 #endif
 
 #ifndef CLIST_BLOCK_SIZE
-#	define CLIST_BLOCK_SIZE 64
+#	define CLIST_BLOCK_SIZE 128
 #endif
 
 #include <assert.h>
@@ -55,6 +56,14 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+#	define CLIST_HAS_UNISTD
+#	include <unistd.h>
+#endif
+#if defined(_WIN32) || defined(_WIN32_)
+#	define CLIST_HAS_WINDOWS
+#	include <windows.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -78,6 +87,9 @@ extern "C" {
 #		define CLIST_EXPECT(expr, val) (expr)
 #	endif
 
+	/* note that `expr` must be either 0 or 1 for this to work - the 1/0 are not
+	   booleans but instead literal integral values.*/
+	/* https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html#index-_005f_005fbuiltin_005fexpect */
 #	define CLIST_LIKELY(expr) CLIST_EXPECT((expr), 1)
 #	define CLIST_UNLIKELY(expr) CLIST_EXPECT((expr), 0)
 
@@ -94,6 +106,98 @@ extern "C" {
 		} while (0)
 
 #	define CLIST_ASSERT(cond) assert(cond) /* don't care about the likelihood here since it's debug-only */
+
+#	define CLIST_ERR ((size_t) -1)
+#	define CLIST_MAX_INDEX ((size_t) -2) /* inclusive */
+
+#	ifndef CLIST_PAGE_SIZE
+#		if defined(CLIST_HAS_UNISTD) && _POSIX_VERSION >= 200112L
+#			define CLIST_PAGE_SIZE(_ptr) do { \
+					*(_ptr) = sysconf(_SC_PAGESIZE); \
+				} while (0)
+#		elif defined(CLIST_HAS_WINDOWS)
+#			define CLIST_PAGE_SIZE(_ptr) do { \
+					SYSTEM_INFO __cl_psz_sysInfo; \
+					GetSystemInfo(&__cl_psz_sysInfo); \
+					*(_ptr) = __cl_psz_sysInfo.dwPageSize; \
+				} while (0)
+#		else
+#			define CLIST_PAGE_SIZE(_ptr) do { \
+					/* sane default :P */ \
+					*(_ptr) = 4096; \
+				} while (0)
+#		endif
+#	endif
+#endif
+
+/* usage: CLIST_ALLOC(&dest_ptr, size) (it is a statement, not an expression) */
+#if defined(CLIST_ALLOC) || defined(CLIST_REALLOC) || defined(CLIST_FREE)
+#	ifndef CLIST_ALLOC
+#		error "Either CLIST_REALLOC or CLIST_FREE were defined but CLIST_ALLOC was not. All three (or none of them) must be defined."
+#	endif
+#	ifndef CLIST_REALLOC
+#		error "Either CLIST_ALLOC or CLIST_FREE were defined but CLIST_REALLOC was not. All three (or none of them) must be defined."
+#	endif
+#	ifndef CLIST_FREE
+#		error "Either CLIST_ALLOC or CLIST_REALLOC were defined but CLIST_FREE was not. All three (or none of them) must be defined."
+#	endif
+#else
+#	if !defined(CLIST_SAFE_REALLOC) && (defined(CLIST_HAS_UNISTD) && _POSIX_VERSION >= 200112L)
+#		define CLIST_ALLOC(_ptrptr, _size) do { \
+				size_t __cla_pgsz; \
+				size_t __cla_rlsz; \
+				int __cla_res; \
+				CLIST_PAGE_SIZE(&__cla_pgsz); \
+				__cla_rlsz = (_size); \
+				__cla_rlsz += __cla_rlsz % __cla_pgsz; \
+				__cla_res = posix_memalign((_ptrptr), CLIST_PAGE_SIZE, __cla_rlsz); \
+				if (CLIST_UNLIKELY(__cla_res != 0)) { \
+					(*(_ptrptr)) = NULL; \
+					errno = __cla_res; \
+				} \
+			} while (0)
+#	elif !defined(CLIST_SAFE_REALLOC) && (defined(_ISOC11_SOURCE) || __STDC_VERSION__ == 201112L)
+		/* yes, if you're using this library with -std=c11 on a non-posix system, you
+		   get a bit of an optimization with memory aligned data */
+#		define CLIST_ALLOC(_ptrptr, _size) do { \
+				size_t __cla_pgsz; \
+				size_t __cla_rlsz; \
+				CLIST_PAGE_SIZE(&__cla_pgsz); \
+				__cla_rlsz = (_size); \
+				__cla_rlsz += __cla_rlsz % __cla_pgsz; \
+				*(_ptrptr) = aligned_alloc(__cla_pgsz, __cla_rlsz); \
+			} while (0)
+#	else /* CLIST_SAFE_REALLOC */
+		/* not much else we can do */
+#		define CLIST_ALLOC(_ptrptr, _size) do { \
+				size_t __cla_pgsz; \
+				size_t __cla_rlsz; \
+				CLIST_PAGE_SIZE(&__cla_pgsz); \
+				__cla_rlsz = (_size); \
+				__cla_rlsz += __cla_rlsz % __cla_pgsz; \
+				*(_ptrptr) = malloc(__cla_rlsz); \
+			} while (0)
+#	endif
+
+	/* no standardized aligned reallocs, unfortunately :/ */
+	/* feel free to define your own */
+#	define CLIST_REALLOC(_success_out, _ptrptr, _size) do { \
+			void *__cla_np; \
+			size_t __cla_pgsz; \
+			size_t __cla_rlsz; \
+			CLIST_PAGE_SIZE(&__cla_pgsz); \
+			__cla_rlsz = (_size); \
+			__cla_rlsz += __cla_rlsz % __cla_pgsz; \
+			__cla_np = realloc(*(_ptrptr), __cla_rlsz); \
+			if (CLIST_UNLIKELY(__cla_np == NULL)) { \
+				*(_success_out) = 0; \
+			} else { \
+				*(_success_out) = 1; \
+				*(_ptrptr) = __cla_np; \
+			} \
+		} while (0)
+
+#	define CLIST_FREE(_ptr) free((_ptr))
 #endif
 
 #ifndef CLIST_API
@@ -124,18 +228,13 @@ extern "C" {
 typedef CLIST_TYPE CLIST(type);
 #undef CLIST_TYPE /* make sure we use the typedef and not the type itself */
 
-typedef struct CLIST(block) {
-#ifdef CLIST_OPTIMIZE_SPLICE
-	size_t elements;
-#endif
-	CLIST(type) data[CLIST_BLOCK_SIZE];
-} CLIST(block);
+#define CLIST_BLOCK_SIZE_BYTES (CLIST_BLOCK_SIZE * sizeof(CLIST(type)))
 
 typedef struct CLIST_T {
 	size_t count;
-	size_t block_count;
-	CLIST(block) *block_list;
-	CLIST(block) stack_block;
+	size_t blocks;
+	CLIST(type) *block;
+	CLIST(type) stack_block[CLIST_BLOCK_SIZE];
 } CLIST_T;
 
 /*
@@ -150,47 +249,109 @@ CLIST_API int CLIST(init) (CLIST_T *list) {
 		/* if NULL is not a zero-pointer then we should honor it. */
 		/* otherwise, this will get optimized out. */
 		/* this will automatically be included on segmented memory models */
-		list->block_list = NULL;
+		list->block = NULL;
 	}
 
 	return 0;
 }
 
 CLIST_API void CLIST(free) (CLIST_T *list) {
-	size_t i;
-
 	if (CLIST_UNLIKELY(list == NULL)) {
 		return;
 	}
 
-	if (CLIST_UNLIKELY(list->block_count == 0)) {
+	if (CLIST_UNLIKELY(list->block == NULL || list->block == list->stack_block)) {
 		/* nothing left to do */
 		return;
 	}
 
-	CLIST_ASSERT(list->block_list != NULL);
-
-	for (i = 0; CLIST_LIKELY(i < list->block_count); i++) {
-		if (CLIST_LIKELY(&list->block_list[i] != &list->stack_block)) {
-			free(&list->block_list[i]);
-		}
-	}
-
-	if (CLIST_UNLIKELY(&list->block_list[i] != &list->stack_block)) {
-		free(list->block_list);
-	}
+	free(list->block);
 }
 
 CLIST_API size_t CLIST(count) (CLIST_T *list) {
-	/* NOTE: doesn't do safe NULL check */
 	CLIST_ASSERT(list != NULL);
 	return list->count;
 }
 
 CLIST_API bool CLIST(empty) (CLIST_T *list) {
-	/* NOTE: doesn't do safe NULL check */
 	CLIST_ASSERT(list != NULL);
 	return list->count == 0;
+}
+
+CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
+	CLIST_ASSERT(list != NULL);
+
+	/* this is the case when a high capacity has been set */
+	if (CLIST_UNLIKELY(block_idx < list->blocks)) {
+		return 0;
+	}
+
+	if (CLIST_UNLIKELY(block_idx == 0)) {
+		CLIST_ASSERT(list->block == NULL);
+		CLIST_ASSERT(list->blocks == 0);
+
+		list->block = list->stack_block;
+	} else if (CLIST_UNLIKELY(block_idx == 1)) {
+		CLIST_ASSERT(list->block == list->stack_block);
+		CLIST_ASSERT(list->blocks == 1);
+
+		CLIST_ALLOC(&list->block, 2 * CLIST_BLOCK_SIZE_BYTES);
+
+		if (CLIST_UNLIKELY(list->block == NULL)) {
+			/* repair the list */
+			list->block = list->stack_block;
+			/* errno already set */
+			return 1;
+		}
+
+		memcpy(list->block, &list->stack_block, CLIST_BLOCK_SIZE_BYTES);
+	} else {
+		int realloc_success;
+
+		CLIST_ASSERT(list->block != NULL);
+		CLIST_ASSERT(list->block != list->stack_block);
+		CLIST_ASSERT(list->blocks >= 2);
+
+		CLIST_REALLOC(&realloc_success, &list->block, (list->blocks + 1) * CLIST_BLOCK_SIZE_BYTES);
+		if (CLIST_UNLIKELY(!realloc_success)) {
+			/* blocks are unmodified */
+			/* errno already set */
+			return 1;
+		}
+	}
+
+	++list->blocks;
+	return 0;
+}
+
+CLIST_API CLIST(type) * CLIST(get) (CLIST_T *list, size_t index) {
+	CLIST_ASSERT(list != NULL);
+	CLIST_ASSERT(index < list->count);
+	CLIST_ASSERT(index <= CLIST_MAX_INDEX);
+	return &list->block[index];
+}
+
+CLIST_API size_t CLIST(add) (CLIST_T *list, CLIST(type) val) {
+	size_t idx = list->count++;
+	size_t block = idx / CLIST_BLOCK_SIZE;
+	size_t offset = idx % CLIST_BLOCK_SIZE;
+
+	CLIST_ASSERT(list != NULL);
+	CLIST_ASSERT(list->count <= CLIST_MAX_INDEX);
+
+	if (CLIST_UNLIKELY(idx > CLIST_MAX_INDEX)) {
+		errno = EOVERFLOW;
+		return CLIST_ERR;
+	}
+
+	if (CLIST_UNLIKELY(offset == 0)) {
+		if (CLIST_UNLIKELY(CLIST(expand)(list, block) != 0)) {
+			return CLIST_ERR;
+		}
+	}
+
+	list->block[idx] = val;
+	return idx;
 }
 
 #ifdef __cplusplus
@@ -204,5 +365,11 @@ CLIST_API bool CLIST(empty) (CLIST_T *list) {
 #undef CLIST_T_
 #undef CLIST_T__
 #undef CLIST_NAME
-#undef CLIST_BLOCK_SIZE
 #undef CLIST_API
+#undef CLIST_HAS_UNISTD
+#undef CLIST_HAS_WINDOWS
+#undef CLIST_ALLOC
+#undef CLIST_REALLOC
+#undef CLIST_FREE
+#undef CLIST_BLOCK_SIZE
+#undef CLIST_BLOCK_SIZE_BYTES

@@ -10,8 +10,4 @@ if (BUILD_TESTING)
 	add_executable (test-clist test-basic.c test-multi.c)
 	target_link_libraries (test-clist autotest)
 	add_test (NAME clist-test COMMAND "$<TARGET_FILE:test-clist>")
-
-	add_executable (test-clist-optimize-splice test-basic-optimize-splice.c)
-	target_link_libraries (test-clist-optimize-splice autotest)
-	add_test (NAME clist-optimize-splice-test COMMAND "$<TARGET_FILE:test-clist-optimize-splice>")
 endif ()
