@@ -1,3 +1,6 @@
 [submodule "ext/autotest"]
 	path = ext/autotest
 	url = https://github.com/qix-/autotest.git
+[submodule "ext/benchmark"]
+	path = ext/benchmark
+	url = https://github.com/google/benchmark.git

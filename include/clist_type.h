@@ -47,7 +47,7 @@
 #endif
 
 #ifndef CLIST_BLOCK_SIZE
-#	define CLIST_BLOCK_SIZE 128
+#	define CLIST_BLOCK_SIZE 256
 #endif
 
 #include <assert.h>
@@ -150,7 +150,7 @@ extern "C" {
 				CLIST_PAGE_SIZE(&__cla_pgsz); \
 				__cla_rlsz = (_size); \
 				__cla_rlsz += __cla_rlsz % __cla_pgsz; \
-				__cla_res = posix_memalign((_ptrptr), CLIST_PAGE_SIZE, __cla_rlsz); \
+				__cla_res = posix_memalign((_ptrptr), __cla_pgsz, __cla_rlsz); \
 				if (CLIST_UNLIKELY(__cla_res != 0)) { \
 					(*(_ptrptr)) = NULL; \
 					errno = __cla_res; \
@@ -241,31 +241,19 @@ typedef struct CLIST_T {
 	METHODS
 */
 
-CLIST_API int CLIST(init) (CLIST_T *list) {
-	CLIST_ASSERT_RETURN(list != NULL, -EINVAL);
-	memset(list, 0, sizeof(*list));
-
-	if (NULL != ((void *)0)) {
-		/* if NULL is not a zero-pointer then we should honor it. */
-		/* otherwise, this will get optimized out. */
-		/* this will automatically be included on segmented memory models */
-		list->block = NULL;
-	}
-
-	return 0;
+CLIST_API void CLIST(init) (CLIST_T *list) {
+	CLIST_ASSERT(list != NULL);
+	list->count = 0;
+	list->blocks = 0;
 }
 
 CLIST_API void CLIST(free) (CLIST_T *list) {
-	if (CLIST_UNLIKELY(list == NULL)) {
-		return;
-	}
+	CLIST_ASSERT(list != NULL);
+	CLIST_ASSERT(list->blocks == 0 || list->block != NULL);
 
-	if (CLIST_UNLIKELY(list->block == NULL || list->block == list->stack_block)) {
-		/* nothing left to do */
-		return;
+	if (list->blocks > 1) {
+		free(list->block);
 	}
-
-	free(list->block);
 }
 
 CLIST_API size_t CLIST(count) (CLIST_T *list) {
@@ -287,7 +275,6 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 	}
 
 	if (CLIST_UNLIKELY(block_idx == 0)) {
-		CLIST_ASSERT(list->block == NULL);
 		CLIST_ASSERT(list->blocks == 0);
 
 		list->block = list->stack_block;
@@ -295,7 +282,7 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 		CLIST_ASSERT(list->block == list->stack_block);
 		CLIST_ASSERT(list->blocks == 1);
 
-		CLIST_ALLOC(&list->block, 2 * CLIST_BLOCK_SIZE_BYTES);
+		CLIST_ALLOC((void **) &list->block, 2 * CLIST_BLOCK_SIZE_BYTES);
 
 		if (CLIST_UNLIKELY(list->block == NULL)) {
 			/* repair the list */
@@ -312,7 +299,7 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 		CLIST_ASSERT(list->block != list->stack_block);
 		CLIST_ASSERT(list->blocks >= 2);
 
-		CLIST_REALLOC(&realloc_success, &list->block, (list->blocks + 1) * CLIST_BLOCK_SIZE_BYTES);
+		CLIST_REALLOC(&realloc_success, (void **) &list->block, (list->blocks + 1) * CLIST_BLOCK_SIZE_BYTES);
 		if (CLIST_UNLIKELY(!realloc_success)) {
 			/* blocks are unmodified */
 			/* errno already set */
