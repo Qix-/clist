@@ -14,7 +14,7 @@
 	     (c) 2018, Josh Junon
 	          mit license
 
-	special thanks to rapidstring
+	 special thanks to rapidstring
 	for the header-only inspiration.
 */
 

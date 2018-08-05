@@ -226,6 +226,36 @@ BM_Init(CPPVector_Get1024, {
 	}
 });
 
+BM_InitD(CList_GetBlock, {
+	clist_init(&L);
+
+	for (size_t i = 0; i < CLIST_BLOCK_SIZE; i++) {
+		if (clist_add(&L, (void *) i) == CLIST_ERR) {
+			state.SkipWithError("list add failed (check errno)");
+		}
+	}
+}, {
+	for (size_t i = 0; i < CLIST_BLOCK_SIZE; i++) {
+		if (*clist_get(&L, i) != (void *) i) {
+			state.SkipWithError("invalid get");
+		}
+	}
+}, {
+	clist_free(&L);
+});
+
+BM_Init(CPPVector_GetBlock, {
+	for (size_t i = 0; i < CLIST_BLOCK_SIZE; i++) {
+		foo.push_back((void *) i);
+	}
+}, {
+	for (size_t i = 0; i < CLIST_BLOCK_SIZE; i++) {
+		if (foo[i] != (void *) i) {
+			state.SkipWithError("invalid get");
+		}
+	}
+});
+
 BM_InitD(CList_Get1mil, {
 	clist_init(&L);
 
@@ -242,7 +272,7 @@ BM_InitD(CList_Get1mil, {
 	}
 }, {
 	clist_free(&L);
-});
+})->Unit(benchmark::kMicrosecond);
 
 BM_Init(CPPVector_Get1mil, {
 	for (size_t i = 0; i < 1000000; i++) {
@@ -254,6 +284,36 @@ BM_Init(CPPVector_Get1mil, {
 			state.SkipWithError("invalid get");
 		}
 	}
-});
+})->Unit(benchmark::kMicrosecond);
+
+BM_InitD(CList_Get100mil, {
+	clist_init(&L);
+
+	for (size_t i = 0; i < 100000000; i++) {
+		if (clist_add(&L, (void *) i) == CLIST_ERR) {
+			state.SkipWithError("list add failed (check errno)");
+		}
+	}
+}, {
+	for (size_t i = 0; i < 100000000; i++) {
+		if (*clist_get(&L, i) != (void *) i) {
+			state.SkipWithError("invalid get");
+		}
+	}
+}, {
+	clist_free(&L);
+})->Unit(benchmark::kMicrosecond);
+
+BM_Init(CPPVector_Get100mil, {
+	for (size_t i = 0; i < 100000000; i++) {
+		foo.push_back((void *) i);
+	}
+}, {
+	for (size_t i = 0; i < 100000000; i++) {
+		if (foo[i] != (void *) i) {
+			state.SkipWithError("invalid get");
+		}
+	}
+})->Unit(benchmark::kMicrosecond);
 
 BENCHMARK_MAIN();

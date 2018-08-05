@@ -161,7 +161,7 @@ extern "C" {
 					errno = __cla_res; \
 				} \
 			} while (0)
-#	elif !defined(CLIST_SAFE_REALLOC) && (defined(_ISOC11_SOURCE) || __STDC_VERSION__ == 201112L)
+#	elif !defined(CLIST_SAFE_REALLOC) && (defined(_ISOC11_SOURCE) || CLIST_C11)
 		/* yes, if you're using this library with -std=c11 on a non-posix system, you
 		   get a bit of an optimization with memory aligned data */
 #		define CLIST_ALLOC(_ptrptr, _size) do { \
