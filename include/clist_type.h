@@ -47,7 +47,12 @@
 #endif
 
 #ifndef CLIST_BLOCK_SIZE
-#	define CLIST_BLOCK_SIZE 256
+#	define CLIST_BLOCK_SIZE 512
+#endif
+
+#ifndef CLIST_BLOCK_GROWTH_RATE
+	/* yes, 4 - you'll eat lots of memory but allocate less */
+#	define CLIST_BLOCK_GROWTH_RATE 4
 #endif
 
 #include <assert.h>
@@ -278,6 +283,7 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 		CLIST_ASSERT(list->blocks == 0);
 
 		list->block = list->stack_block;
+		list->blocks = 1;
 	} else if (CLIST_UNLIKELY(block_idx == 1)) {
 		CLIST_ASSERT(list->block == list->stack_block);
 		CLIST_ASSERT(list->blocks == 1);
@@ -292,6 +298,7 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 		}
 
 		memcpy(list->block, &list->stack_block, CLIST_BLOCK_SIZE_BYTES);
+		list->blocks = 2;
 	} else {
 		int realloc_success;
 
@@ -299,15 +306,16 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 		CLIST_ASSERT(list->block != list->stack_block);
 		CLIST_ASSERT(list->blocks >= 2);
 
-		CLIST_REALLOC(&realloc_success, (void **) &list->block, (list->blocks + 1) * CLIST_BLOCK_SIZE_BYTES);
+		CLIST_REALLOC(&realloc_success, (void **) &list->block, (list->blocks * CLIST_BLOCK_GROWTH_RATE) * CLIST_BLOCK_SIZE_BYTES);
 		if (CLIST_UNLIKELY(!realloc_success)) {
 			/* blocks are unmodified */
 			/* errno already set */
 			return 1;
 		}
+
+		list->blocks *= CLIST_BLOCK_GROWTH_RATE;
 	}
 
-	++list->blocks;
 	return 0;
 }
 
@@ -321,7 +329,6 @@ CLIST_API CLIST(type) * CLIST(get) (CLIST_T *list, size_t index) {
 CLIST_API size_t CLIST(add) (CLIST_T *list, CLIST(type) val) {
 	size_t idx = list->count++;
 	size_t block = idx / CLIST_BLOCK_SIZE;
-	size_t offset = idx % CLIST_BLOCK_SIZE;
 
 	CLIST_ASSERT(list != NULL);
 	CLIST_ASSERT(list->count <= CLIST_MAX_INDEX);
@@ -331,7 +338,7 @@ CLIST_API size_t CLIST(add) (CLIST_T *list, CLIST(type) val) {
 		return CLIST_ERR;
 	}
 
-	if (CLIST_UNLIKELY(offset == 0)) {
+	if (CLIST_UNLIKELY(block == list->blocks)) {
 		if (CLIST_UNLIKELY(CLIST(expand)(list, block) != 0)) {
 			return CLIST_ERR;
 		}
@@ -360,3 +367,4 @@ CLIST_API size_t CLIST(add) (CLIST_T *list, CLIST(type) val) {
 #undef CLIST_FREE
 #undef CLIST_BLOCK_SIZE
 #undef CLIST_BLOCK_SIZE_BYTES
+#undef CLIST_BLOCK_GROWTH_RATE
