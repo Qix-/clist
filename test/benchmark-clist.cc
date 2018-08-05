@@ -22,6 +22,35 @@
 	} \
 	BENCHMARK(BM_##name)
 
+#define BM_Init(name, init, body) static void BM_##name(benchmark::State& state) { \
+		clist L; \
+		(void) L; \
+		std::vector<void*> foo; \
+		(void) foo; \
+		init \
+		for (auto _ : state) { \
+			body \
+		} \
+		benchmark::DoNotOptimize(L); \
+		benchmark::DoNotOptimize(foo); \
+	} \
+	BENCHMARK(BM_##name)
+
+#define BM_InitD(name, init, body, dtor) static void BM_##name(benchmark::State& state) { \
+		clist L; \
+		(void) L; \
+		std::vector<void*> foo; \
+		(void) foo; \
+		init \
+		for (auto _ : state) { \
+			body \
+		} \
+		benchmark::DoNotOptimize(L); \
+		benchmark::DoNotOptimize(foo); \
+		dtor \
+	} \
+	BENCHMARK(BM_##name)
+
 BM(Clist_Initialize, {
 	clist_init(&L);
 	clist_free(&L);
@@ -165,6 +194,66 @@ BM(CPPVector_Get1, {
 	benchmark::ClobberMemory();
 
 	benchmark::DoNotOptimize(foo[0] != (void*) 42);
+});
+
+BM_InitD(CList_Get1024, {
+	clist_init(&L);
+
+	for (size_t i = 0; i < 1024; i++) {
+		if (clist_add(&L, (void *) i) == CLIST_ERR) {
+			state.SkipWithError("list add failed (check errno)");
+		}
+	}
+}, {
+	for (size_t i = 0; i < 1024; i++) {
+		if (*clist_get(&L, i) != (void *) i) {
+			state.SkipWithError("invalid get");
+		}
+	}
+}, {
+	clist_free(&L);
+});
+
+BM_Init(CPPVector_Get1024, {
+	for (size_t i = 0; i < 1024; i++) {
+		foo.push_back((void *) i);
+	}
+}, {
+	for (size_t i = 0; i < 1024; i++) {
+		if (foo[i] != (void *) i) {
+			state.SkipWithError("invalid get");
+		}
+	}
+});
+
+BM_InitD(CList_Get1mil, {
+	clist_init(&L);
+
+	for (size_t i = 0; i < 1000000; i++) {
+		if (clist_add(&L, (void *) i) == CLIST_ERR) {
+			state.SkipWithError("list add failed (check errno)");
+		}
+	}
+}, {
+	for (size_t i = 0; i < 1000000; i++) {
+		if (*clist_get(&L, i) != (void *) i) {
+			state.SkipWithError("invalid get");
+		}
+	}
+}, {
+	clist_free(&L);
+});
+
+BM_Init(CPPVector_Get1mil, {
+	for (size_t i = 0; i < 1000000; i++) {
+		foo.push_back((void *) i);
+	}
+}, {
+	for (size_t i = 0; i < 1000000; i++) {
+		if (foo[i] != (void *) i) {
+			state.SkipWithError("invalid get");
+		}
+	}
 });
 
 BENCHMARK_MAIN();
