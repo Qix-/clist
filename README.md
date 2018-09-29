@@ -2,7 +2,7 @@
 
 The missing C lists library.
 
-Faster than `std::vector` in most cases.
+Faster than GNU's `std::vector` in most cases.
 
 ## Building
 
