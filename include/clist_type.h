@@ -55,6 +55,10 @@
 #	define CLIST_BLOCK_GROWTH_RATE 4
 #endif
 
+#ifndef _POSIX_SOURCE
+#	define _POSIX_SOURCE
+#endif
+
 #include <assert.h>
 #include <errno.h>
 #include <stdbool.h>
