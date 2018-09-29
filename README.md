@@ -2,6 +2,8 @@
 
 The missing C lists library.
 
+Faster than `std::vector` in most cases.
+
 ## Building
 
 ```console
