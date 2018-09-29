@@ -6,7 +6,8 @@ The missing C lists library.
 
 ```console
 $ mkdir build && cd build
-$ cmake .. -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=Debug    # or =Release
+$ cmake .. -DCMAKE_BUILD_TYPE=Release                     # release mode
+$ cmake .. -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=Debug    # debug mode (testing only works on unix right now)
 $ cmake --build .
 ```
 
