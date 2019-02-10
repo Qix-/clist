@@ -82,4 +82,4 @@ clist_mystr_add(&str_list, "Hello");
 ```
 
 # License
-clist is Copyright &copy; 2018 by Josh Junon and released under the MIT License.
+clist is Copyright &copy; 2018-2019 by Josh Junon and released under the MIT License.
