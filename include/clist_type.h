@@ -19,6 +19,9 @@
 	      performance penalty since the memory is no longer aligned
 	      and the block allocations will be forced to fall back
 	      to malloc(3).
+
+	NOTE: If you're using C++, you probably also want to define
+	      CLIST_REF prior to including this header.
 */
 
 /* see header comment - DO NOT PRAGMA ONCE OR INCLUDE GUARD! */
