@@ -299,6 +299,8 @@ CLIST_API int CLIST(init_capacity) (CLIST_T *list, size_t n_elems) {
 		list->block = list->stack_block;
 		return 1;
 	}
+
+	return 0;
 }
 
 CLIST_API void CLIST(free) (CLIST_T *list) {

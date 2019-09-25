@@ -23,6 +23,20 @@ void TEST_basic_init(void) {
 	clist_free(&L);
 }
 
+void TEST_basic_init_capac(void) {
+	clist L;
+
+	clist_init_capac(&L, 14);
+	assert(clist_count(&L) == 14);
+	assert(!clist_empty(&L));
+	clist_free(&L);
+
+	clist_init_capac(&L, 1400);
+	assert(clist_count(&L) == 1400);
+	assert(!clist_empty(&L));
+	clist_free(&L);
+}
+
 #ifndef NDEBUG
 void TEST_FAIL_get_on_empty_list(void) {
 	clist L;
