@@ -32,6 +32,7 @@
 #	define CLIST_T CLIST_T__(CLIST_NAME)
 #	define CLIST_T__(name) CLIST_T_(name)
 #	define CLIST_T_(name) clist_##name
+#	define CLIST_SHOULD_CLASSIFY 1
 #else
 #	define CLIST(thing) clist_##thing
 #	define CLIST_T clist
@@ -40,10 +41,22 @@
 #	define CLIST__
 #	define CLIST_T_
 #	define CLIST_T__
+#	define CLIST_SHOULD_CLASSIFY 0
 #endif
 
 #ifndef CLIST_TYPE
 #	define CLIST_TYPE void*
+#endif
+
+#ifndef CLIST_REF
+#	define CLIST_REF
+#	define CLIST_REF_PTR *
+#	define CLIST_REF_ADDROF &
+#else
+#	undef CLIST_REF
+#	define CLIST_REF &
+#	define CLIST_REF_PTR &
+#	define CLIST_REF_ADDROF
 #endif
 
 #ifndef CLIST_BLOCK_SIZE
@@ -228,6 +241,14 @@ extern "C" {
 #	else
 #		define CLIST_API static
 #	endif
+
+#	if defined(__GNUC__)
+#		define CLIST_INLINE __inline__
+#	elif defined(_MSC_VER)
+#		define CLIST_INLINE __forceinline
+#	else
+#		define CLIST_INLINE inline
+#	endif
 #endif
 
 /*
@@ -265,12 +286,12 @@ CLIST_API void CLIST(free) (CLIST_T *list) {
 	}
 }
 
-CLIST_API size_t CLIST(count) (CLIST_T *list) {
+CLIST_API size_t CLIST(count) (const CLIST_T *list) {
 	CLIST_ASSERT(list != NULL);
 	return list->count;
 }
 
-CLIST_API bool CLIST(empty) (CLIST_T *list) {
+CLIST_API bool CLIST(empty) (const CLIST_T *list) {
 	CLIST_ASSERT(list != NULL);
 	return list->count == 0;
 }
@@ -323,14 +344,14 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 	return 0;
 }
 
-CLIST_API CLIST(type) * CLIST(get) (CLIST_T *list, size_t index) {
+CLIST_API CLIST(type) CLIST_REF_PTR CLIST(get) (const CLIST_T *list, size_t index) {
 	CLIST_ASSERT(list != NULL);
 	CLIST_ASSERT(index < list->count);
 	CLIST_ASSERT(index <= CLIST_MAX_INDEX);
-	return &list->block[index];
+	return CLIST_REF_ADDROF list->block[index];
 }
 
-CLIST_API size_t CLIST(add) (CLIST_T *list, CLIST(type) val) {
+CLIST_API size_t CLIST(add) (CLIST_T *list, const CLIST(type) CLIST_REF val) {
 	size_t idx = list->count++;
 	size_t block = idx / CLIST_BLOCK_SIZE;
 
@@ -354,6 +375,54 @@ CLIST_API size_t CLIST(add) (CLIST_T *list, CLIST(type) val) {
 
 #ifdef __cplusplus
 }
+
+#	if CLIST_SHOULD_CLASSIFY
+namespace clist {
+
+struct CLIST_NAME {
+	CLIST_INLINE CLIST_NAME() noexcept {
+		CLIST(init)(&L);
+	}
+
+	CLIST_INLINE ~CLIST_NAME() noexcept {
+		CLIST(free)(&L);
+	}
+
+	CLIST_INLINE size_t count() const noexcept {
+		return CLIST(count)(&L);
+	}
+
+	CLIST_INLINE bool empty() const noexcept {
+		return CLIST(empty)(&L);
+	}
+
+	CLIST_INLINE CLIST(type) CLIST_REF_PTR get(size_t index) const noexcept {
+		return CLIST(get)(&L, index);
+	}
+
+	CLIST_INLINE size_t add(const CLIST(type) CLIST_REF val) {
+		return CLIST(add)(&L, val);
+	}
+
+	template <typename... Args>
+	CLIST_INLINE size_t emplace(Args const& ...args) {
+		return CLIST(add)(&L, CLIST(type)(args...));
+	}
+
+	CLIST_INLINE CLIST(type) CLIST_REF_PTR operator[](size_t index) const noexcept {
+		return get(index);
+	}
+
+	CLIST_INLINE CLIST(type) CLIST_REF_PTR back() const noexcept {
+		return get(count() - 1);
+	}
+
+private:
+	CLIST_T L;
+};
+
+}
+#	endif
 #endif
 
 #undef CLIST
@@ -372,3 +441,7 @@ CLIST_API size_t CLIST(add) (CLIST_T *list, CLIST(type) val) {
 #undef CLIST_BLOCK_SIZE
 #undef CLIST_BLOCK_SIZE_BYTES
 #undef CLIST_BLOCK_GROWTH_RATE
+#undef CLIST_REF
+#undef CLIST_REF_PTR
+#undef CLIST_REF_ADDROF
+#undef CLIST_SHOULD_CLASSIFY
