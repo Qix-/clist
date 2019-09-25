@@ -277,6 +277,27 @@ CLIST_API void CLIST(init) (CLIST_T *list) {
 	list->blocks = 0;
 }
 
+CLIST_API int CLIST(init_capacity) (CLIST_T *list, size_t n_elems) {
+	CLIST_ASSERT(list != NULL);
+	list->count = 0;
+	list->blocks = 0;
+
+	if (CLIST_LIKELY(n_elems < CLIST_BLOCK_SIZE)) {
+		return 0;
+	}
+
+	size_t n_blocks = (n_elems / CLIST_BLOCK_SIZE) + 1;
+	list->blocks = n_blocks;
+
+	CLIST_ALLOC((void **) &list->block, n_blocks * CLIST_BLOCK_SIZE_BYTES);
+	if (CLIST_UNLIKELY((void*) list->block == NULL)) {
+		/* repair list */
+		list->blocks = 0;
+		list->block = list->stack_block;
+		return 1;
+	}
+}
+
 CLIST_API void CLIST(free) (CLIST_T *list) {
 	CLIST_ASSERT(list != NULL);
 	CLIST_ASSERT(list->blocks == 0 || list->block != NULL);
@@ -304,7 +325,29 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 		return 0;
 	}
 
-	if (CLIST_UNLIKELY(block_idx == 0)) {
+	if (CLIST_LIKELY(block_idx >= 2)) {
+		int realloc_success;
+
+		CLIST_ASSERT(list->block != NULL);
+		CLIST_ASSERT(list->block != list->stack_block);
+		CLIST_ASSERT(list->blocks >= 2);
+
+		CLIST_REALLOC(
+			&realloc_success,
+			(void **) &list->block,
+			(
+				list->blocks * CLIST_BLOCK_GROWTH_RATE
+			) * CLIST_BLOCK_SIZE_BYTES
+		);
+
+		if (CLIST_UNLIKELY(!realloc_success)) {
+			/* blocks are unmodified */
+			/* errno already set */
+			return 1;
+		}
+
+		list->blocks *= CLIST_BLOCK_GROWTH_RATE;
+	} else if (CLIST_UNLIKELY(block_idx == 0)) {
 		CLIST_ASSERT(list->blocks == 0);
 
 		list->block = list->stack_block;
@@ -324,21 +367,6 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 
 		memcpy(list->block, &list->stack_block, CLIST_BLOCK_SIZE_BYTES);
 		list->blocks = 2;
-	} else {
-		int realloc_success;
-
-		CLIST_ASSERT(list->block != NULL);
-		CLIST_ASSERT(list->block != list->stack_block);
-		CLIST_ASSERT(list->blocks >= 2);
-
-		CLIST_REALLOC(&realloc_success, (void **) &list->block, (list->blocks * CLIST_BLOCK_GROWTH_RATE) * CLIST_BLOCK_SIZE_BYTES);
-		if (CLIST_UNLIKELY(!realloc_success)) {
-			/* blocks are unmodified */
-			/* errno already set */
-			return 1;
-		}
-
-		list->blocks *= CLIST_BLOCK_GROWTH_RATE;
 	}
 
 	return 0;
@@ -348,6 +376,7 @@ CLIST_API CLIST(type) CLIST_REF_PTR CLIST(get) (const CLIST_T *list, size_t inde
 	CLIST_ASSERT(list != NULL);
 	CLIST_ASSERT(index < list->count);
 	CLIST_ASSERT(index <= CLIST_MAX_INDEX);
+	CLIST_ASSERT(index != CLIST_ERR);
 	return CLIST_REF_ADDROF list->block[index];
 }
 
@@ -382,6 +411,19 @@ namespace clist {
 struct CLIST_NAME {
 	CLIST_INLINE CLIST_NAME() noexcept {
 		CLIST(init)(&L);
+	}
+
+	CLIST_INLINE CLIST_NAME(size_t capacity) noexcept {
+		int res = CLIST(init_capacity)(&L, capacity);
+		CLIST_ASSERT(res == 0);
+	}
+
+	CLIST_INLINE CLIST_NAME(size_t capacity, const CLIST(type) &init) noexcept {
+		int res = CLIST(init_capacity)(&L, capacity);
+		CLIST_ASSERT(res == 0);
+		for (size_t i = 0; i < capacity; i++) {
+			memcpy(&L.block[i], &init, sizeof(CLIST(type)));
+		}
 	}
 
 	CLIST_INLINE ~CLIST_NAME() noexcept {
