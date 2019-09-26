@@ -6,6 +6,7 @@
 
 #define _CLIST_BLOCK_SIZE 512
 #define CLIST_BLOCK_SIZE _CLIST_BLOCK_SIZE
+#define CLIST_NO_REF /* act as though we're still in C */
 #include "clist.h"
 #define CLIST_BLOCK_SIZE _CLIST_BLOCK_SIZE
 

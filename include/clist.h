@@ -11,8 +11,8 @@
 
 	  the missing C list library
 	     github.com/qix-/clist
-	     (c) 2018, Josh Junon
-	          mit license
+	   (c) 2018-2019, Josh Junon
+	         mit license
 
 	 special thanks to rapidstring
 	for the header-only inspiration.

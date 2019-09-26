@@ -11,12 +11,19 @@ if (BUILD_TESTING)
 	endif ()
 
 	if (UNIX AND NOT APPLE)
+		set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-maybe-uninitialized")
+		set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
+
 		add_executable (test-clist test-basic.c test-multi.c)
 		target_link_libraries (test-clist autotest)
 		add_test (NAME clist-test COMMAND "$<TARGET_FILE:test-clist>")
 	else ()
 		message (STATUS "not compiling clist tests - not unix (autotest requires unix)")
 	endif ()
+
+	add_executable (test-clist-cpp test-cpp.cc)
+	target_link_libraries (test-clist-cpp memswap)
+	add_test (NAME clist-test-cpp COMMAND "$<TARGET_FILE:test-clist-cpp>")
 
 	# not added as a test but only built if testing is enabled.
 	add_executable (clist-benchmark benchmark-clist.cc)

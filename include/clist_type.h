@@ -54,6 +54,10 @@
 #	define CLIST_TYPE void*
 #endif
 
+#if defined(__cplusplus) && !defined(CLIST_NO_REF)
+#	define CLIST_REF
+#endif
+
 #ifndef CLIST_REF
 #	define CLIST_REF
 #	define CLIST_REF_PTR *
@@ -94,6 +98,8 @@
 #endif
 
 #ifdef __cplusplus
+#	include <new>
+
 extern "C" {
 #endif
 
@@ -269,6 +275,7 @@ extern "C" {
 */
 
 typedef CLIST_TYPE CLIST(type);
+#define CLIST_STACK(list) ((CLIST(type)*)(&((list)->stack_block[0])))
 #undef CLIST_TYPE /* make sure we use the typedef and not the type itself */
 
 #define CLIST_BLOCK_SIZE_BYTES (CLIST_BLOCK_SIZE * sizeof(CLIST(type)))
@@ -277,7 +284,7 @@ typedef struct CLIST_T {
 	size_t count;
 	size_t blocks;
 	CLIST(type) *block;
-	CLIST(type) stack_block[CLIST_BLOCK_SIZE];
+	char stack_block[CLIST_BLOCK_SIZE_BYTES];
 } CLIST_T;
 
 /*
@@ -308,7 +315,7 @@ CLIST_API int CLIST(init_capacity) (CLIST_T *list, size_t n_elems) {
 	if (CLIST_UNLIKELY((void*) list->block == NULL)) {
 		/* repair list */
 		list->blocks = 0;
-		list->block = list->stack_block;
+		list->block = CLIST_STACK(list);
 		list->count = 0;
 		return 1;
 	}
@@ -347,7 +354,7 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 		int realloc_success;
 
 		CLIST_ASSERT(list->block != NULL);
-		CLIST_ASSERT(list->block != list->stack_block);
+		CLIST_ASSERT(list->block != CLIST_STACK(list));
 		CLIST_ASSERT(list->blocks >= 2);
 
 		CLIST_REALLOC(
@@ -368,23 +375,23 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 	} else if (CLIST_UNLIKELY(block_idx == 0)) {
 		CLIST_ASSERT(list->blocks == 0);
 
-		list->block = list->stack_block;
+		list->block = CLIST_STACK(list);
 		list->blocks = 1;
 	} else if (CLIST_UNLIKELY(block_idx == 1)) {
-		CLIST_ASSERT(list->block == list->stack_block);
+		CLIST_ASSERT(list->block == CLIST_STACK(list));
 		CLIST_ASSERT(list->blocks == 1);
 
-		CLIST_ALLOC((void **) &list->block, 2 * CLIST_BLOCK_SIZE_BYTES);
+		CLIST_ALLOC((void **) &list->block, CLIST_BLOCK_GROWTH_RATE * CLIST_BLOCK_SIZE_BYTES);
 
 		if (CLIST_UNLIKELY(list->block == NULL)) {
 			/* repair the list */
-			list->block = list->stack_block;
+			list->block = CLIST_STACK(list);
 			/* errno already set */
 			return 1;
 		}
 
-		CLIST_MEMCPY(list->block, &list->stack_block, CLIST_BLOCK_SIZE_BYTES);
-		list->blocks = 2;
+		CLIST_MEMCPY(list->block, CLIST_STACK(list), CLIST_BLOCK_SIZE_BYTES);
+		list->blocks = CLIST_BLOCK_GROWTH_RATE;
 	}
 
 	return 0;
@@ -436,7 +443,7 @@ CLIST_API int CLIST(swap) (CLIST_T *list_a, CLIST_T *list_b) {
 		list_b->blocks = tmp_size;
 		list_b->block = tmp_ptr;
 	} else if (!list_a->blocks && !list_b->blocks) {
-		return CLIST_MEMSWAP(list_a->stack_block, list_b->stack_block, sizeof(CLIST_BLOCK_SIZE_BYTES));
+		return CLIST_MEMSWAP(&list_a->stack_block[0], &list_b->stack_block[0], sizeof(CLIST_BLOCK_SIZE_BYTES));
 	} else {
 		CLIST_T *stack_list;
 		CLIST_T *heap_list;
@@ -450,15 +457,15 @@ CLIST_API int CLIST(swap) (CLIST_T *list_a, CLIST_T *list_b) {
 		}
 
 		CLIST_ASSERT(heap_list->blocks > 0);
-		CLIST_ASSERT(heap_list->block != heap_list->stack_block);
+		CLIST_ASSERT(heap_list->block != CLIST_STACK(heap_list));
 		CLIST_ASSERT(stack_list->blocks == 0);
-		CLIST_ASSERT(stack_list->block == stack_list->stack_block);
+		CLIST_ASSERT(stack_list->block == CLIST_STACK(stack_list));
 
 		stack_list->blocks = heap_list->blocks;
 		stack_list->block = heap_list->block;
 		heap_list->blocks = 0;
-		heap_list->block = heap_list->stack_block;
-		CLIST_MEMCPY(&list_a->stack_block, &list_b->stack_block, sizeof(CLIST_BLOCK_SIZE_BYTES));
+		heap_list->block = CLIST_STACK(heap_list);
+		CLIST_MEMCPY(CLIST_STACK(list_a), CLIST_STACK(list_b), sizeof(CLIST_BLOCK_SIZE_BYTES));
 	}
 
 	return 0;
@@ -472,6 +479,8 @@ CLIST_API int CLIST(swap) (CLIST_T *list_a, CLIST_T *list_b) {
 namespace clist {
 
 struct CLIST_NAME {
+	typedef CLIST(type) type;
+
 	CLIST_INLINE CLIST_NAME() noexcept {
 		CLIST(init)(&L);
 	}
@@ -480,18 +489,27 @@ struct CLIST_NAME {
 		int res = CLIST(init_capacity)(&L, capacity);
 		(void) res;
 		CLIST_ASSERT(res == 0);
+
+		for (size_t i = 0; i < capacity; i++) {
+			new (&L.block[i]) CLIST(type)();
+		}
 	}
 
-	CLIST_INLINE CLIST_NAME(size_t capacity, const CLIST(type) &init) noexcept {
+	template <typename T>
+	CLIST_INLINE CLIST_NAME(size_t capacity, const T &init) noexcept {
 		int res = CLIST(init_capacity)(&L, capacity);
 		(void) res;
 		CLIST_ASSERT(res == 0);
+
 		for (size_t i = 0; i < capacity; i++) {
-			CLIST_MEMCPY(&L.block[i], &init, sizeof(CLIST(type)));
+			L.block[i] = init;
 		}
 	}
 
 	CLIST_INLINE ~CLIST_NAME() noexcept {
+		for (size_t i = 0; i < L.count; i++) {
+			L.block[i].~CLIST(type)();
+		}
 		CLIST(free)(&L);
 	}
 
@@ -527,6 +545,7 @@ struct CLIST_NAME {
 #	ifdef CLIST_MEMSWAP
 	CLIST_INLINE void swap(CLIST_NAME &other) noexcept {
 		int res = CLIST(swap)(&L, &other.L);
+		(void) res;
 		CLIST_ASSERT(res == 0);
 	}
 #	endif
@@ -559,3 +578,7 @@ private:
 #undef CLIST_REF_PTR
 #undef CLIST_REF_ADDROF
 #undef CLIST_SHOULD_CLASSIFY
+#undef CLIST_STACK
+#ifdef CLIST_NO_REF
+#	undef CLIST_NO_REF
+#endif
