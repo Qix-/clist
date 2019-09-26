@@ -22,6 +22,9 @@
 
 	NOTE: If you're using C++, you probably also want to define
 	      CLIST_REF prior to including this header.
+
+	NOTE: clist_swap() is available if CLIST_MEMSWAP(p1,p2,n) is
+	      defined beforehand. It should return 0 for success.
 */
 
 /* see header comment - DO NOT PRAGMA ONCE OR INCLUDE GUARD! */
@@ -252,6 +255,10 @@ extern "C" {
 #	else
 #		define CLIST_INLINE inline
 #	endif
+
+#	ifndef CLIST_MEMCPY
+#		define CLIST_MEMCPY memcpy
+#	endif
 #endif
 
 /*
@@ -370,7 +377,7 @@ CLIST_API int CLIST(expand) (CLIST_T *list, size_t block_idx) {
 			return 1;
 		}
 
-		memcpy(list->block, &list->stack_block, CLIST_BLOCK_SIZE_BYTES);
+		CLIST_MEMCPY(list->block, &list->stack_block, CLIST_BLOCK_SIZE_BYTES);
 		list->blocks = 2;
 	}
 
@@ -407,6 +414,51 @@ CLIST_API size_t CLIST(add) (CLIST_T *list, const CLIST(type) CLIST_REF val) {
 	return idx;
 }
 
+#ifdef CLIST_MEMSWAP
+CLIST_API int CLIST(swap) (CLIST_T *list_a, CLIST_T *list_b) {
+	size_t tmp_size;
+	CLIST(type) *tmp_ptr;
+
+	CLIST_ASSERT(list_a != NULL);
+	CLIST_ASSERT(list_b != NULL);
+
+	if (list_a->blocks && list_b->blocks) {
+		tmp_size = list_a->blocks;
+		tmp_ptr = list_a->block;
+		list_a->blocks = list_b->blocks;
+		list_a->block = list_b->block;
+		list_b->blocks = tmp_size;
+		list_b->block = tmp_ptr;
+	} else if (!list_a->blocks && !list_b->blocks) {
+		return CLIST_MEMSWAP(list_a->stack_block, list_b->stack_block, sizeof(CLIST_BLOCK_SIZE_BYTES));
+	} else {
+		CLIST_T *stack_list;
+		CLIST_T *heap_list;
+
+		if (list_a->blocks) {
+			heap_list = list_a;
+			stack_list = list_b;
+		} else {
+			heap_list = list_b;
+			stack_list = list_a;
+		}
+
+		CLIST_ASSERT(heap_list->blocks > 0);
+		CLIST_ASSERT(heap_list->block != heap_list->stack_block);
+		CLIST_ASSERT(stack_list->blocks == 0);
+		CLIST_ASSERT(stack_list->block == stack_list->stack_block);
+
+		stack_list->blocks = heap_list->blocks;
+		stack_list->block = heap_list->block;
+		heap_list->blocks = 0;
+		heap_list->block = heap_list->stack_block;
+		CLIST_MEMCPY(&list_a->stack_block, &list_b->stack_block, sizeof(CLIST_BLOCK_SIZE_BYTES));
+	}
+
+	return 0;
+}
+#endif
+
 #ifdef __cplusplus
 }
 
@@ -427,7 +479,7 @@ struct CLIST_NAME {
 		int res = CLIST(init_capacity)(&L, capacity);
 		CLIST_ASSERT(res == 0);
 		for (size_t i = 0; i < capacity; i++) {
-			memcpy(&L.block[i], &init, sizeof(CLIST(type)));
+			CLIST_MEMCPY(&L.block[i], &init, sizeof(CLIST(type)));
 		}
 	}
 
@@ -463,6 +515,13 @@ struct CLIST_NAME {
 	CLIST_INLINE CLIST(type) CLIST_REF_PTR back() const noexcept {
 		return get(count() - 1);
 	}
+
+#	ifdef CLIST_MEMSWAP
+	CLIST_INLINE void swap(CLIST_NAME &other) noexcept {
+		int res = CLIST(swap)(&L, &other.L);
+		CLIST_ASSERT(res == 0);
+	}
+#	endif
 
 private:
 	CLIST_T L;
