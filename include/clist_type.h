@@ -259,6 +259,9 @@ extern "C" {
 #	ifndef CLIST_MEMCPY
 #		define CLIST_MEMCPY memcpy
 #	endif
+#	ifndef CLIST_MEMSET
+#		define CLIST_MEMSET memset
+#	endif
 #endif
 
 /*
@@ -289,21 +292,24 @@ CLIST_API void CLIST(init) (CLIST_T *list) {
 
 CLIST_API int CLIST(init_capacity) (CLIST_T *list, size_t n_elems) {
 	CLIST_ASSERT(list != NULL);
-	list->count = 0;
-	list->blocks = 0;
+
+	list->count = n_elems;
 
 	if (CLIST_LIKELY(n_elems < CLIST_BLOCK_SIZE)) {
+		list->blocks = 0;
+		list->count = n_elems;
+		CLIST_MEMSET(list->stack_block, 0, n_elems * sizeof(CLIST(type)));
 		return 0;
 	}
 
-	size_t n_blocks = (n_elems / CLIST_BLOCK_SIZE) + 1;
-	list->blocks = n_blocks;
+	list->blocks = (n_elems / CLIST_BLOCK_SIZE) + 1;
 
-	CLIST_ALLOC((void **) &list->block, n_blocks * CLIST_BLOCK_SIZE_BYTES);
+	CLIST_ALLOC((void **) &list->block, list->blocks * CLIST_BLOCK_SIZE_BYTES);
 	if (CLIST_UNLIKELY((void*) list->block == NULL)) {
 		/* repair list */
 		list->blocks = 0;
 		list->block = list->stack_block;
+		list->count = 0;
 		return 1;
 	}
 
@@ -472,11 +478,13 @@ struct CLIST_NAME {
 
 	CLIST_INLINE CLIST_NAME(size_t capacity) noexcept {
 		int res = CLIST(init_capacity)(&L, capacity);
+		(void) res;
 		CLIST_ASSERT(res == 0);
 	}
 
 	CLIST_INLINE CLIST_NAME(size_t capacity, const CLIST(type) &init) noexcept {
 		int res = CLIST(init_capacity)(&L, capacity);
+		(void) res;
 		CLIST_ASSERT(res == 0);
 		for (size_t i = 0; i < capacity; i++) {
 			CLIST_MEMCPY(&L.block[i], &init, sizeof(CLIST(type)));

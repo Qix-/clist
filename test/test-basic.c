@@ -23,15 +23,15 @@ void TEST_basic_init(void) {
 	clist_free(&L);
 }
 
-void TEST_basic_init_capac(void) {
+void TEST_basic_init_capacity(void) {
 	clist L;
 
-	clist_init_capac(&L, 14);
+	clist_init_capacity(&L, 14);
 	assert(clist_count(&L) == 14);
 	assert(!clist_empty(&L));
 	clist_free(&L);
 
-	clist_init_capac(&L, 1400);
+	clist_init_capacity(&L, 1400);
 	assert(clist_count(&L) == 1400);
 	assert(!clist_empty(&L));
 	clist_free(&L);
