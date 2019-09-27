@@ -16,15 +16,8 @@ struct foo {
 	}
 
 	foo(foo &&other) : armed(other.armed) {
-		other.armed = false;
-		if (armed) ++foo::allocated;
-	}
-
-	foo & operator=(const foo &other) {
-		if (armed) --foo::allocated;
-		armed = other.armed;
-		if (armed) ++foo::allocated;
-		return *this;
+		// nothing should be moved
+		assert(false && "move constructor called");
 	}
 
 	~foo() {

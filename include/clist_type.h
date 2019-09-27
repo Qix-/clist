@@ -423,7 +423,11 @@ CLIST_API size_t CLIST(add) (CLIST_T *list, const CLIST(type) CLIST_REF val) {
 		}
 	}
 
+#ifdef __cplusplus
+	new (&list->block[idx]) CLIST(type)(val);
+#else
 	list->block[idx] = val;
+#endif
 	return idx;
 }
 
